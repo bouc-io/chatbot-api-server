@@ -1,0 +1,65 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Chat {
+  id         String    @id @default(uuid())
+  title      String
+  summary    String?   @db.VarChar(255)
+  user_id    String    // from JWT preferred_username
+  org_id     String?   // from JWT org_id claim
+  model_id   String    // e.g. "gpt-4", "llama2"
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  metadata   Json?     @default("{}")
+  messages   Message[]
+
+  // Distillation tracking
+  last_distilled_at       DateTime?
+  distilled_message_count Int       @default(0)
+
+  @@index([user_id])
+  @@index([org_id, user_id])
+  @@index([updated_at])
+  @@map("Chat")
+}
+
+model Message {
+  id               String    @id @default(uuid())
+  message_group_id String    @default(uuid())
+  role             String    // 'user', 'assistant', 'system'
+  content          String    @db.Text
+  chat             Chat      @relation(fields: [chat_id], references: [id], onDelete: Cascade)
+  chat_id          String
+  user_id          String    // from JWT preferred_username
+  model_id         String?   // optional override
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  metadata         Json?     @default("{}")
+
+  // Token usage (populated for assistant messages only)
+  prompt_tokens     Int?  @default(0)
+  completion_tokens Int?  @default(0)
+  total_tokens      Int?  @default(0)
+
+  feedback         MessageFeedback?
+
+  @@index([chat_id, created_at])
+  @@map("Message")
+}
+
+model MessageFeedback {
+  id         String   @id @default(uuid())
+  message    Message  @relation(fields: [message_id], references: [id], onDelete: Cascade)
+  message_id String   @unique @map("message_id")
+  rating     String   // 'positive' | 'negative'
+  comment    String?
+  created_at DateTime @default(now()) @map("created_at")
+
+  @@map("MessageFeedback")
+}
