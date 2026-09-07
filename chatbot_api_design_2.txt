@@ -1,0 +1,285 @@
+# Chatbot API Server Design
+
+## Authentication
+All endpoints require a JWT Bearer token in the `Authorization` header.
+The `user_id` (username) is derived from the `preferred_username` claim in the token.
+The `user_id` should be stored in the database for resource ownership.
+
+---
+
+## Chat Management
+
+### Create new chat session
+```
+POST /v1/chats
+```
+**Request body:**
+```json
+{
+  "title": "New Chat",
+  "model_id": "gpt-4",
+  "summary": "Optional summary"
+}
+```
+**Headers:**
+- `Authorization`: Bearer <token>
+
+**Response:**
+```json
+{
+  "id": "uuid...",
+  "title": "New Chat",
+  "summary": "Optional summary",
+  "user_id": "user123",
+  "model_id": "gpt-4",
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "updated_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### List user's chats
+```
+GET /v1/chats
+```
+**Query params:**
+- `page` (int): Page number (default: 1)
+- `limit` (int): Items per page (default: 20)
+- `sort` (string): Sort by field (default: "updated_at")
+- `order` (string): "asc" or "desc" (default: "desc")
+
+**Headers:**
+- `Authorization`: Bearer <token>
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid...",
+      "title": "My Chat",
+      "summary": "Summary...",
+      "user_id": "user123",
+      "model_id": "gpt-4",
+      "created_at": "2024-01-01T00:00:00.000Z",
+      "updated_at": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 45,
+    "total_pages": 3
+  }
+}
+```
+*Note: Returns chats belonging to the authenticated user.*
+
+### Get chat details
+```
+GET /v1/chats/{chat_id}
+```
+**Response:**
+```json
+{
+  "id": "uuid...",
+  "title": "My Chat",
+  "summary": "Summary...",
+  "user_id": "user123",
+  "model_id": "gpt-4",
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "updated_at": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Update chat
+```
+PATCH /v1/chats/{chat_id}
+```
+**Request body:**
+```json
+{
+  "title": "Updated Title",
+  "summary": "Updated Summary"
+}
+```
+
+### Delete chat
+```
+DELETE /v1/chats/{chat_id}
+```
+**Headers:**
+- `Authorization`: Bearer <token>
+
+---
+
+## Message Management
+
+Base Path: `/v1/chats/{chat_id}/messages`
+
+### Create message (Send to chat)
+```
+POST /v1/chats/{chat_id}/messages
+```
+**Headers:**
+- `Authorization`: Bearer <token>
+
+**Request body:**
+```json
+{
+  "role": "user",
+  "content": "Hello world",
+  "metadata": {
+    "model_id": "gpt-4"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "uuid...",
+  "message_group_id": "uuid...",
+  "role": "user",
+  "content": "Hello world",
+  "chat_id": "uuid...",
+  "user_id": "user123",
+  "model_id": "gpt-4",
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "updated_at": "2024-01-01T00:00:00.000Z",
+  "metadata": {}
+}
+```
+
+### List messages in chat
+```
+GET /v1/chats/{chat_id}/messages
+```
+**Query params:**
+- `page` (int): Page number
+- `limit` (int): Messages per page
+- `before` (string): Get messages before this message ID (cursor pagination support)
+- `after` (string): Get messages after this message ID
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid...",
+      "message_group_id": "uuid...",
+      "role": "user",
+      "content": "Hello",
+      "chat_id": "uuid...",
+      "user_id": "user123",
+      "model_id": "gpt-4",
+      "created_at": "...",
+      "updated_at": "...",
+      "metadata": {}
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 15,
+    "total_pages": 1
+  }
+}
+```
+
+### Get specific message
+```
+GET /v1/chats/{chat_id}/messages/{message_id}
+```
+**Response:**
+```json
+{
+  "id": "uuid...",
+  "message_group_id": "uuid...",
+  "role": "user",
+  "content": "Hello world",
+  "chat_id": "uuid...",
+  "user_id": "user123",
+  "model_id": "gpt-4",
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "updated_at": "2024-01-01T00:00:00.000Z",
+  "metadata": {}
+}
+```
+
+### Update message
+```
+PATCH /v1/chats/{chat_id}/messages/{message_id}
+```
+**Request body:**
+```json
+{
+  "content": "Updated content"
+}
+```
+
+### Delete message
+```
+DELETE /v1/chats/{chat_id}/messages/{message_id}
+```
+
+---
+
+## Error Responses
+
+All errors follow this structure:
+```json
+{
+  "error": {
+    "code": "INVALID_REQUEST",
+    "message": "Chat not found",
+    "details": {
+      "chat_id": "uuid..."
+    }
+  }
+}
+```
+
+**Error codes:**
+- `INVALID_REQUEST`: 400
+- `UNAUTHORIZED`: 401 (Missing/Invalid Token)
+- `FORBIDDEN`: 403 (Token valid but access denied)
+- `NOT_FOUND`: 404
+- `RATE_LIMITED`: 429
+- `INTERNAL_ERROR`: 500
+
+---
+
+## Database Design
+
+```sql
+model Chat {
+  id         String    @id @default(uuid())
+  title      String
+  summary    String?   @db.VarChar(255)
+  user_id    String    // from JWT preferred_username
+  model_id   String    // e.g. "gpt-4", "llama2"
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  metadata   Json?     @default("{}")
+  messages   Message[]
+  
+  @@index([user_id])
+  @@index([updated_at])
+}
+
+model Message {
+  id               String    @id @default(uuid())
+  message_group_id String    @default(uuid())
+  role             String    // 'user', 'assistant', 'system'
+  content          String    @db.Text
+  chat             Chat      @relation(fields: [chat_id], references: [id], onDelete: Cascade)
+  chat_id          String
+  user_id          String    // from JWT preferred_username
+  model_id         String?   // optional override if different from chat or if tracking per message
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  metadata         Json?     @default("{}")
+
+  @@index([chat_id, created_at])
+}
+```
