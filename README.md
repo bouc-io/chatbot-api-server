@@ -1,5 +1,7 @@
 # Chatbot API Server
 
+[ARCHIVED]
+
 A Node.js RESTful API server for chatbot UI applications with PostgreSQL database integration, Prisma ORM, and Docker containerization.
 
 ## Features
